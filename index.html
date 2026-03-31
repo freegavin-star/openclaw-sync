@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小古健康 SOP 演示模型</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏥 小古健康健康管理服务 SOP 演示</h1>
+            <p class="subtitle">可交互流程演示模型</p>
+        </header>
+
+        <!-- 流程概览 -->
+        <section class="flow-overview">
+            <h2>服务流程闭环</h2>
+            <div class="flow-steps">
+                <div class="flow-step" data-step="1">
+                    <div class="step-icon">📞</div>
+                    <div class="step-name">意向沟通</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" data-step="2">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-name">签约成交</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" data-step="3">
+                    <div class="step-icon">📋</div>
+                    <div class="step-name">评估方案</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" data-step="4">
+                    <div class="step-icon">💪</div>
+                    <div class="step-name">健康干预</div>
+                </div>
+                <div class="flow-arrow loop">↻</div>
+            </div>
+        </section>
+
+        <!-- 角色切换 -->
+        <section class="role-section">
+            <h2>选择角色体验</h2>
+            <div class="role-tabs">
+                <button class="role-tab active" data-role="patient">👤 患者端</button>
+                <button class="role-tab" data-role="manager">👩‍⚕️ 健管师端</button>
+                <button class="role-tab" data-role="doctor">👨‍⚕️ 医生端</button>
+            </div>
+        </section>
+
+        <!-- 交互区域 -->
+        <section class="interaction-area">
+            <!-- 患者端 -->
+            <div class="panel patient-panel active">
+                <h3>患者操作台</h3>
+                
+                <div class="patient-flow">
+                    <div class="action-card" id="action-register">
+                        <div class="card-header">
+                            <span class="card-icon">📱</span>
+                            <span class="card-title">注册 & 评估</span>
+                            <span class="card-status pending">待完成</span>
+                        </div>
+                        <div class="card-body">
+                            <p>上传体检报告，AI 生成健康风险评估</p>
+                            <button class="btn btn-primary" onclick="simulateRegister()">模拟注册</button>
+                        </div>
+                        <div class="card-result" id="register-result"></div>
+                    </div>
+
+                    <div class="action-card" id="action-plan">
+                        <div class="card-header">
+                            <span class="card-icon">📋</span>
+                            <span class="card-title">接收健康管理方案</span>
+                            <span class="card-status pending">待接收</span>
+                        </div>
+                        <div class="card-body">
+                            <p>查看医生制定的个性化方案（色彩标识）</p>
+                            <button class="btn btn-primary" onclick="showHealthPlan()" disabled>查看方案</button>
+                        </div>
+                        <div class="card-result" id="plan-result"></div>
+                    </div>
+
+                    <div class="action-card" id="action-checkin">
+                        <div class="card-header">
+                            <span class="card-icon">✅</span>
+                            <span class="card-title">每日打卡</span>
+                            <span class="card-status pending">待打卡</span>
+                        </div>
+                        <div class="card-body">
+                            <p>执行健康管理方案，每日打卡反馈</p>
+                            <div class="checkin-sim">
+                                <button class="btn btn-success" onclick="simulateCheckin('breakfast')" disabled>早餐打卡</button>
+                                <button class="btn btn-success" onclick="simulateCheckin('lunch')" disabled>午餐打卡</button>
+                                <button class="btn btn-success" onclick="simulateCheckin('exercise')" disabled>运动打卡</button>
+                            </div>
+                            <div class="health-points">
+                                健康值: <span id="health-points">0</span>
+                            </div>
+                        </div>
+                        <div class="card-result" id="checkin-result"></div>
+                    </div>
+
+                    <div class="action-card" id="action-renew">
+                        <div class="card-header">
+                            <span class="card-icon">🔄</span>
+                            <span class="card-title">在线续约</span>
+                            <span class="card-status pending">待续约</span>
+                        </div>
+                        <div class="card-body">
+                            <p>服务到期，续约或升级套餐</p>
+                            <button class="btn btn-warning" onclick="simulateRenew()" disabled>续约服务</button>
+                        </div>
+                        <div class="card-result" id="renew-result"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 健管师端 -->
+            <div class="panel manager-panel">
+                <h3>健管师工作台</h3>
+                
+                <div class="manager-flow">
+                    <div class="action-card">
+                        <div class="card-header">
+                            <span class="card-icon">📊</span>
+                            <span class="card-title">患者列表</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="patient-list" id="patient-list">
+                                <div class="patient-item">
+                                    <span class="patient-name">张先生</span>
+                                    <span class="patient-status status-pending">待评估</span>
+                                </div>
+                                <div class="patient-item">
+                                    <span class="patient-name">李女士</span>
+                                    <span class="patient-status status-active">执行中</span>
+                                </div>
+                                <div class="patient-item">
+                                    <span class="patient-name">王先生</span>
+                                    <span class="patient-status status-renew">待续约</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-card">
+                        <div class="card-header">
+                            <span class="card-icon">💬</span>
+                            <span class="card-title">企微消息</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="wechat-sim">
+                                <div class="msg-list" id="msg-list">
+                                    <div class="msg msg-patient">患者张先生：请问这个食谱我可以吃燕麦吗？</div>
+                                    <div class="msg msg-system">⏰ 5分钟未回复，已启动自动回复</div>
+                                    <div class="msg msg-auto">小古健康Bot：您的咨询已收到，医生稍后会详细解答～</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-card">
+                        <div class="card-header">
+                            <span class="card-icon">📅</span>
+                            <span class="card-title">任务日历</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="task-list">
+                                <div class="task-item">09:00 - 确认今日打卡情况</div>
+                                <div class="task-item">10:00 - 审核风险评估报告</div>
+                                <div class="task-item">14:00 - 周反馈汇总</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 医生端 -->
+            <div class="panel doctor-panel">
+                <h3>医生工作台</h3>
+                
+                <div class="doctor-flow">
+                    <div class="action-card">
+                        <div class="card-header">
+                            <span class="card-icon">📋</span>
+                            <span class="card-title">制定健康管理方案</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="plan-editor">
+                                <div class="plan-section">
+                                    <h4>🍽️ 推荐食材</h4>
+                                    <div class="food-tags">
+                                        <span class="tag tag-green">全麦面包</span>
+                                        <span class="tag tag-green">西兰花</span>
+                                        <span class="tag tag-green">三文鱼</span>
+                                        <span class="tag tag-green">糙米</span>
+                                    </div>
+                                </div>
+                                <div class="plan-section">
+                                    <h4>🚫 不推荐</h4>
+                                    <div class="food-tags">
+                                        <span class="tag tag-red">白米饭</span>
+                                        <span class="tag tag-red">糖果</span>
+                                        <span class="tag tag-red">碳酸饮料</span>
+                                    </div>
+                                </div>
+                                <div class="plan-section">
+                                    <h4>🏃 推荐运动</h4>
+                                    <div class="food-tags">
+                                        <span class="tag tag-yellow">快走 30分钟</span>
+                                        <span class="tag tag-yellow">游泳 20分钟</span>
+                                    </div>
+                                </div>
+                                <div class="plan-section">
+                                    <h4>💊 宣教内容</h4>
+                                    <p class="edu-content">糖尿病患者每日碳水化合物摄入量应控制在...（AI生成）</p>
+                                </div>
+                                <button class="btn btn-primary" onclick="sendPlanToPatient()">发送方案给患者</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-card">
+                        <div class="card-header">
+                            <span class="card-icon">⚠️</span>
+                            <span class="card-title">异常预警</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert-list">
+                                <div class="alert-item alert-warning">
+                                    <span class="alert-icon">⚠️</span>
+                                    <span class="alert-text">患者李女士：血糖 3.2 mmol/L（偏低）</span>
+                                    <button class="btn btn-sm">立即处理</button>
+                                </div>
+                                <div class="alert-item alert-danger">
+                                    <span class="alert-icon">🔴</span>
+                                    <span class="alert-text">患者王先生：连续3天未打卡</span>
+                                    <button class="btn btn-sm">跟进</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 流程日志 -->
+        <section class="log-section">
+            <h2>📜 流程日志</h2>
+            <div class="log-container" id="log-container">
+                <div class="log-entry">系统初始化完成，等待操作...</div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
