@@ -917,7 +917,10 @@ function toggleLesson(el){
 }
 
 function toggleFold(btn){
-  var content = btn.previousElementSibling;
+  var box = btn.closest('.know-box');
+  if(!box) return;
+  var content = box.querySelector('.know-content');
+  if(!content) return;
   if(content.classList.contains('fold')){
     content.classList.remove('fold');
     btn.textContent='收起 ▲';
