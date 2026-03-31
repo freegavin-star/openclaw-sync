@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 任务监控仪表盘</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0e27;
+      color: #e0e6f0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* 顶部标题 */
+    .header {
+      text-align: center;
+      padding: 24px 20px 16px;
+      background: linear-gradient(180deg, #131a3a 0%, transparent 100%);
+    }
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header p {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    /* 状态栏 */
+    .status-bar {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      padding: 12px;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    .status-bar span { display: flex; align-items: center; gap: 6px; }
+    .status-bar .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .dot.idle { background: #475569; }
+    .dot.active { background: #3b82f6; box-shadow: 0 0 6px #3b82f6; }
+    .dot.thinking { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; animation: pulse 1s infinite; }
+    .dot.done { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* 主画布 */
+    .canvas {
+      position: relative;
+      max-width: 900px;
+      margin: 0 auto;
+      height: 420px;
+    }
+
+    /* SVG连线层 */
+    .svg-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Agent 节点 */
+    .agents {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 24px;
+      width: 100%;
+      max-width: 800px;
+      padding: 0 20px;
+    }
+
+    .agent {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 2;
+    }
+
+    .avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: #1e2a4a;
+      border: 2px solid #2d3a5c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .agent.pm .avatar { background: linear-gradient(135deg, #1e3a5f, #0f2744); border-color: #3b82f6; }
+    .agent.planner .avatar { background: linear-gradient(135deg, #2d1f5e, #1a1040); border-color: #8b5cf6; }
+    .agent.designer .avatar { background: linear-gradient(135deg, #5e1f2d, #40101a); border-color: #ec4899; }
+    .agent.coder .avatar { background: linear-gradient(135deg, #1f5e2d, #10401a); border-color: #22c55e; }
+    .agent.analyst .avatar { background: linear-gradient(135deg, #5e4e1f, #403210); border-color: #f59e0b; }
+
+    /* 头像激活态 */
+    .agent.active .avatar {
+      box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+      border-color: #60a5fa;
+    }
+    .agent.planner.active .avatar { box-shadow: 0 0 20px rgba(139, 92, 246, 0.4); border-color: #a78bfa; }
+    .agent.designer.active .avatar { box-shadow: 0 0 20px rgba(236, 72, 153, 0.4); border-color: #f472b6; }
+    .agent.coder.active .avatar { box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); border-color: #4ade80; }
+    .agent.analyst.active .avatar { box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); border-color: #fbbf24; }
+
+    /* 头像变暗 */
+    .agent.idle .avatar { opacity: 0.5; filter: grayscale(0.3); }
+
+    /* 思考中动画 */
+    .thinking-ring {
+      position: absolute;
+      top: -4px; left: -4px; right: -4px; bottom: -4px;
+      border-radius: 20px;
+      border: 2px solid transparent;
+      border-top-color: #f59e0b;
+      animation: spin 1s linear infinite;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .agent.thinking .thinking-ring { opacity: 1; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 完成对勾 */
+    .check-mark {
+      position: absolute;
+      bottom: -6px; right: -6px;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      color: #fff;
+      opacity: 0;
+      transform: scale(0);
+      transition: all 0.3s;
+    }
+    .agent.done .check-mark { opacity: 1; transform: scale(1); }
+
+    .agent-name {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #94a3b8;
+    }
+    .agent-status {
+      font-size: 0.65rem;
+      color: #475569;
+      height: 14px;
+    }
+    .agent.active .agent-name, .agent.thinking .agent-name { color: #e2e8f0; }
+
+    /* 电流粒子动画 */
+    .particle {
+      position: absolute;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #60a5fa;
+      box-shadow: 0 0 8px #60a5fa;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+    }
+    .particle.active { opacity: 1; }
+
+    /* 任务卡片区域 */
+    .task-cards {
+      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .task-cards h3 {
+      font-size: 0.8rem;
+      color: #475569;
+      margin-bottom: 10px;
+    }
+    .cards-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .cards-list::-webkit-scrollbar { width: 4px; }
+    .cards-list::-webkit-scrollbar-track { background: #1e293b; }
+    .cards-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    .task-card {
+      background: #131a3a;
+      border: 1px solid #1e2a4a;
+      border-radius: 10px;
+      padding: 12px 16px;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .task-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .task-card-id {
+      font-size: 0.7rem;
+      color: #64748b;
+      font-family: monospace;
+    }
+    .task-card-status {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .task-card-status.pending { background: #1e3a5f; color: #60a5fa; }
+    .task-card-status.running { background: #3b2f00; color: #f59e0b; }
+    .task-card-status.done { background: #14532d; color: #22c55e; }
+    .task-card-msg { font-size: 0.75rem; color: #94a3b8; }
+    .task-card-flow {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+      font-size: 0.65rem;
+      color: #475569;
+    }
+    .flow-node {
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #1e293b;
+    }
+
+    /* 日志区域 */
+    .log-area {
+      padding: 16px 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .log-area h3 {
+      font-size: 0.75rem;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+    .log-list {
+      background: #0d1225;
+      border: 1px solid #1a2238;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.7rem;
+      color: #64748b;
+      max-height: 120px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column-reverse;
+    }
+    .log-list::-webkit-scrollbar { width: 4px; }
+    .log-list::-webkit-scrollbar-track { background: #0d1225; }
+    .log-list::-webkit-scrollbar-thumb { background: #1e293b; }
+    .log-entry { padding: 2px 0; }
+    .log-entry.info { color: #60a5fa; }
+    .log-entry.success { color: #22c55e; }
+    .log-entry.warn { color: #f59e0b; }
+    .log-entry.error { color: #ef4444; }
+
+    /* 启动提示 */
+    .server-hint {
+      text-align: center;
+      padding: 8px;
+      font-size: 0.7rem;
+      color: #334155;
+    }
+    .server-hint code {
+      background: #1e293b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🦞 Multi-Agent 任务监控仪表盘</h1>
+  <p>实时展示 Agent 团队协作状态</p>
+</div>
+
+<div class="status-bar">
+  <span><div class="dot idle" id="dot-pm"></div> PM</span>
+  <span><div class="dot idle" id="dot-planner"></div> Planner</span>
+  <span><div class="dot idle" id="dot-designer"></div> Designer</span>
+  <span><div class="dot idle" id="dot-coder"></div> Coder</span>
+  <span><div class="dot idle" id="dot-analyst"></div> Analyst</span>
+</div>
+
+<div class="canvas" id="canvas">
+  <svg class="svg-layer" id="svgLayer" viewBox="0 0 900 420" preserveAspectRatio="xMidYMid meet"></svg>
+
+  <div class="agents">
+    <div class="agent pm" id="agent-pm" data-agent="pm">
+      <div class="avatar">
+        <span>🦞</span>
+        <div class="thinking-ring"></div>
+        <div class="check-mark">✓</div>
+      </div>
+      <div class="agent-name">PM 小爪</div>
+      <div class="agent-status" id="status-pm"></div>
+    </div>
+
+    <div class="agent planner" id="agent-planner" data-agent="planner">
+      <div class="avatar">
+        <span>📋</span>
+        <div class="thinking-ring"></div>
+        <div class="check-mark">✓</div>
+      </div>
+      <div class="agent-name">Planner</div>
+      <div class="agent-status" id="status-planner"></div>
+    </div>
+
+    <div class="agent designer" id="agent-designer" data-agent="designer">
+      <div class="avatar">
+        <span>🎨</span>
+        <div class="thinking-ring"></div>
+        <div class="check-mark">✓</div>
+      </div>
+      <div class="agent-name">Designer</div>
+      <div class="agent-status" id="status-designer"></div>
+    </div>
+
+    <div class="agent coder" id="agent-coder" data-agent="coder">
+      <div class="avatar">
+        <span>💻</span>
+        <div class="thinking-ring"></div>
+        <div class="check-mark">✓</div>
+      </div>
+      <div class="agent-name">Coder</div>
+      <div class="agent-status" id="status-coder"></div>
+    </div>
+
+    <div class="agent analyst" id="agent-analyst" data-agent="analyst">
+      <div class="avatar">
+        <span>📊</span>
+        <div class="thinking-ring"></div>
+        <div class="check-mark">✓</div>
+      </div>
+      <div class="agent-name">Analyst</div>
+      <div class="agent-status" id="status-analyst"></div>
+    </div>
+  </div>
+</div>
+
+<div class="task-cards">
+  <h3>📋 任务列表</h3>
+  <div class="cards-list" id="cardsList"></div>
+</div>
+
+<div class="log-area">
+  <h3>📜 实时日志</h3>
+  <div class="log-list" id="logList"></div>
+</div>
+
+<div class="server-hint">
+  HTTP POST 接口: <code>POST /api/update</code> | 本地运行: <code>python3 -m http.server 8080</code>
+</div>
+
+<script>
+// ===== 状态管理 =====
+const state = {
+  tasks: {},       // taskId -> { status, flow: [] }
+  agents: {}       // agentName -> { status: idle|active|thinking|done, lastMsg }
+};
+
+// ===== DOM 引用 =====
+const agents = ['pm', 'planner', 'designer', 'coder', 'analyst'];
+const svgLayer = document.getElementById('svgLayer');
+const cardsList = document.getElementById('cardsList');
+const logList = document.getElementById('logList');
+
+// ===== 日志记录 =====
+function log(msg, level = 'info') {
+  const el = document.createElement('div');
+  el.className = `log-entry ${level}`;
+  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  el.textContent = `[${time}] ${msg}`;
+  logList.prepend(el);
+  // 限制日志数量
+  while (logList.children.length > 100) {
+    logList.removeChild(logList.lastChild);
+  }
+}
+
+// ===== Agent 状态更新 =====
+function setAgentStatus(agent, status, msg) {
+  const el = document.getElementById(`agent-${agent}`);
+  const statusEl = document.getElementById(`status-${agent}`);
+  const dot = document.getElementById(`dot-${agent}`);
+
+  // 清除所有状态类
+  el.classList.remove('idle', 'active', 'thinking', 'done');
+  el.classList.add(status);
+  if (statusEl) statusEl.textContent = msg || '';
+  if (dot) {
+    dot.classList.remove('idle', 'active', 'thinking', 'done');
+    dot.classList.add(status);
+  }
+}
+
+// ===== 电流动画 =====
+function getAgentCenter(agent) {
+  const el = document.getElementById(`agent-${agent}`);
+  const canvas = document.getElementById('canvas');
+  const rect = el.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  return {
+    x: rect.left - canvasRect.left + rect.width / 2,
+    y: rect.top - canvasRect.top + rect.height / 2
+  };
+}
+
+function drawFlow(from, to, color) {
+  const f = getAgentCenter(from);
+  const t = getAgentCenter(to);
+
+  // 创建路径
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const mx = (f.x + t.x) / 2;
+  const my = (f.y + t.y) / 2 - 40;
+  path.setAttribute('d', `M${f.x},${f.y} Q${mx},${my} ${t.x},${t.y}`);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', color || '#60a5fa');
+  path.setAttribute('stroke-width', '2');
+  path.setAttribute('stroke-dasharray', '8,4');
+  path.setAttribute('opacity', '0.6');
+  svgLayer.appendChild(path);
+
+  // 绘制路径动画
+  const len = path.getTotalLength();
+  path.style.strokeDasharray = len;
+  path.style.strokeDashoffset = len;
+
+  // 粒子
+  const particle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  particle.setAttribute('r', '4');
+  particle.setAttribute('fill', color || '#60a5fa');
+  particle.setAttribute('filter', 'drop-shadow(0 0 4px ' + (color || '#60a5fa') + ')');
+  svgLayer.appendChild(particle);
+
+  // 动画：绘制路径 + 粒子移动
+  let start = null;
+  const dur = 800; // ms
+
+  function animate(ts) {
+    if (!start) start = ts;
+    const progress = Math.min((ts - start) / dur, 1);
+
+    // 绘制路径
+    path.style.strokeDashoffset = len * (1 - progress);
+
+    // 粒子位置
+    const pt = path.getPointAtLength(len * progress);
+    particle.setAttribute('cx', pt.x);
+    particle.setAttribute('cy', pt.y);
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // 动画结束，延迟删除
+      setTimeout(() => {
+        path.remove();
+        particle.remove();
+      }, 300);
+    }
+  }
+
+  requestAnimationFrame(animate);
+  log(`⚡ ${from} → ${to} 电流流动`, 'info');
+}
+
+// ===== 任务卡片 =====
+function updateTaskCard(taskId, status, flow, msg) {
+  let card = document.getElementById(`card-${taskId}`);
+  if (!card) {
+    card = document.createElement('div');
+    card.id = `card-${taskId}`;
+    card.className = 'task-card';
+    cardsList.prepend(card);
+  }
+
+  const statusLabel = { pending: '等待中', running: '进行中', done: '已完成' };
+  const statusClass = { pending: 'pending', running: 'running', done: 'done' };
+
+  card.innerHTML = `
+    <div class="task-card-header">
+      <span class="task-card-id">#${taskId}</span>
+      <span class="task-card-status ${statusClass[status] || 'pending'}">${statusLabel[status] || status}</span>
+    </div>
+    <div class="task-card-msg">${msg || ''}</div>
+    ${flow && flow.length > 0 ? `
+      <div class="task-card-flow">
+        ${flow.map(f => `<span class="flow-node">${f}</span>`).join(' → ')}
+      </div>
+    ` : ''}
+  `;
+}
+
+// ===== 消息处理 =====
+function handleEvent(data) {
+  const { type, taskId, from, to, message } = data;
+  const agentColor = {
+    pm: '#3b82f6', planner: '#8b5cf6', designer: '#ec4899',
+    coder: '#22c55e', analyst: '#f59e0b'
+  };
+
+  switch (type) {
+    case 'task_start':
+      state.tasks[taskId] = { status: 'pending', flow: [] };
+      updateTaskCard(taskId, 'pending', [], message);
+      log(`📋 任务开始: ${taskId} - ${message}`, 'info');
+      break;
+
+    case 'task_dispatch':
+      if (state.tasks[taskId]) {
+        state.tasks[taskId].flow.push(from);
+        state.tasks[taskId].status = 'running';
+      }
+      drawFlow(from, to, agentColor[to]);
+      setAgentStatus(to, 'thinking', '思考中...');
+      updateTaskCard(taskId, 'running', state.tasks[taskId].flow, message);
+      log(`📨 分发任务: ${from} → ${to} (${taskId})`, 'info');
+      break;
+
+    case 'agent_thinking':
+      setAgentStatus(to, 'thinking', message || '思考中...');
+      if (state.tasks[taskId]) {
+        state.tasks[taskId].status = 'running';
+        updateTaskCard(taskId, 'running', state.tasks[taskId].flow, message);
+      }
+      log(`🤔 ${to} 思考中: ${message}`, 'warn');
+      break;
+
+    case 'agent_done':
+      setAgentStatus(to, 'done', message || '完成');
+      if (state.tasks[taskId]) {
+        updateTaskCard(taskId, 'running', state.tasks[taskId].flow, message);
+      }
+      log(`✅ ${to} 完成任务: ${message}`, 'success');
+      break;
+
+    case 'report_back':
+      drawFlow(from, 'pm', agentColor[from]);
+      setAgentStatus(from, 'done', '已汇报');
+      if (state.tasks[taskId]) {
+        state.tasks[taskId].flow.push('✓' + from);
+        updateTaskCard(taskId, 'running', state.tasks[taskId].flow, message);
+      }
+      log(`📤 ${from} 汇报给 PM: ${message}`, 'success');
+      break;
+
+    case 'pm_aggregate':
+      setAgentStatus('pm', 'active', message || '汇总中...');
+      if (state.tasks[taskId]) {
+        updateTaskCard(taskId, 'running', state.tasks[taskId].flow, message);
+      }
+      log(`🔄 PM 汇总: ${message}`, 'info');
+      break;
+
+    case 'task_complete':
+      if (state.tasks[taskId]) {
+        state.tasks[taskId].status = 'done';
+        updateTaskCard(taskId, 'done', state.tasks[taskId].flow, message);
+      }
+      setAgentStatus('pm', 'done', '任务完成');
+      agents.forEach(a => {
+        if (state.agents[a]?.status === 'done') {
+          setAgentStatus(a, 'idle', '');
+          setAgentStatus(a, 'done', '完成');
+        }
+      });
+      log(`🎉 任务全部完成: ${taskId} - ${message}`, 'success');
+      break;
+
+    default:
+      log(`未知事件类型: ${type}`, 'error');
+  }
+
+  // 更新 state
+  if (to) {
+    state.agents[to] = { status: type.includes('done') || type.includes('complete') ? 'done' : type.includes('thinking') ? 'thinking' : 'active', lastMsg: message };
+  }
+}
+
+// ===== HTTP Server (嵌入式) =====
+let serverPort = 3000;
+
+function startServer(port) {
+  const http = require('http');
+  const url = require('url');
+
+  const server = http.createServer((req, res) => {
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const parsedUrl = url.parse(req.url, true);
+
+    if (req.method === 'POST' && parsedUrl.pathname === '/api/update') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          handleEvent(data);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+          log(`📥 收到 POST: ${data.type}`, 'info');
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+    } else if (req.method === 'GET' && parsedUrl.pathname === '/api/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ tasks: state.tasks, agents: state.agents }));
+    } else {
+      res.writeHead(404);
+      res.end('Not Found');
+    }
+  });
+
+  server.listen(port, () => {
+    log(`🚀 HTTP Server 启动: http://localhost:${port}`, 'success');
+    log(`📡 POST 端点: http://localhost:${port}/api/update`, 'info');
+  });
+}
+
+// ===== 初始化 =====
+log('🦞 Agent 监控仪表盘初始化...', 'info');
+
+// 如果是 Node.js 环境，启动 HTTP 服务器
+if (typeof require !== 'undefined' && typeof process !== 'undefined') {
+  const args = process.argv.slice(2);
+  const portArg = args.find(a => a.startsWith('--port='));
+  const port = portArg ? parseInt(portArg.split('=')[1]) : 3000;
+  startServer(port);
+} else {
+  log('⚠️ 非 Node.js 环境，请通过外部服务器提供 POST 接口', 'warn');
+  log('💡 提示: 将此文件放入支持 HTTP 的环境，或用 python3 -m http.server 8080 + 单独的服务处理 POST', 'info');
+}
+
+// 暴露全局处理函数（供外部调用）
+window.handleEvent = handleEvent;
+window.updateTaskCard = updateTaskCard;
+window.setAgentStatus = setAgentStatus;
+window.drawFlow = drawFlow;
+window.log = log;
+</script>
+</body>
+</html>
